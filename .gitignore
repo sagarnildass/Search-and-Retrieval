@@ -1,0 +1,7 @@
+data
+venv
+*.pkl
+*.parquet
+*.bin
+.ipynb_checkpoints
+__pycache__

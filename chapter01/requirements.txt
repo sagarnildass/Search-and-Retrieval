@@ -1,0 +1,10 @@
+# Requirements for Chapter 1: Basic Vector Retrieval with FAISS
+
+# Core dependencies
+numpy>=1.21.0
+faiss-cpu>=1.7.4  # Use faiss-gpu if you have CUDA support
+sentence-transformers>=2.2.0
+
+# Optional but recommended
+torch>=1.9.0  # Required by sentence-transformers
+transformers>=4.20.0  # Required by sentence-transformers
