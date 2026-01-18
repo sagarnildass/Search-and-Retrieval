@@ -112,7 +112,7 @@ TrainingExample = {
 
 ### Phase 1: Data Preparation
 
-**Deliverable**: `chapter02/prepare_training_data.py`
+**Deliverable**: `chapter02_TTSN/prepare_training_data.py`
 
 **Tasks:**
 1. Load examples and products data
@@ -123,14 +123,14 @@ TrainingExample = {
 6. Save training data in efficient format (parquet or PyTorch Dataset)
 
 **Output:**
-- `chapter02/data/training_pairs.parquet`
-- `chapter02/data/val_pairs.parquet`
-- `chapter02/data/test_pairs.parquet`
+- `chapter02_TTSN/data/training_pairs.parquet`
+- `chapter02_TTSN/data/val_pairs.parquet`
+- `chapter02_TTSN/data/test_pairs.parquet`
 - Statistics: positive/negative ratios, label distribution
 
 ### Phase 2: Two-Tower Model Architecture
 
-**Deliverable**: `chapter02/two_tower_model.py`
+**Deliverable**: `chapter02_TTSN/two_tower_model.py`
 
 **Components:**
 
@@ -166,7 +166,7 @@ class TwoTowerModel(nn.Module):
 
 ### Phase 3: Loss Functions
 
-**Deliverable**: `chapter02/losses.py`
+**Deliverable**: `chapter02_TTSN/losses.py`
 
 **Implement:**
 
@@ -197,7 +197,7 @@ def in_batch_negative_loss(query_embs, product_embs, labels):
 
 ### Phase 4: Training Script
 
-**Deliverable**: `chapter02/train_two_tower.py`
+**Deliverable**: `chapter02_TTSN/train_two_tower.py`
 
 **Features:**
 1. Load training data
@@ -228,7 +228,7 @@ def in_batch_negative_loss(query_embs, product_embs, labels):
 
 ### Phase 5: Hard Negative Mining
 
-**Deliverable**: `chapter02/hard_negative_mining.py`
+**Deliverable**: `chapter02_TTSN/hard_negative_mining.py`
 
 **Strategy:**
 1. Load current model (after initial training)
@@ -249,13 +249,13 @@ def in_batch_negative_loss(query_embs, product_embs, labels):
 
 ### Phase 6: Inference and Reindexing
 
-**Deliverable**: `chapter02/reindex_with_trained_model.py`
+**Deliverable**: `chapter02_TTSN/reindex_with_trained_model.py`
 
 **Tasks:**
 1. Load trained two-tower model
 2. Generate product embeddings using product tower
 3. Rebuild FAISS indices (Flat + HNSW)
-4. Save new indices to `chapter02/data/indices/`
+4. Save new indices to `chapter02_TTSN/data/indices/`
 5. Update metadata with model information
 
 **Note**: 
@@ -265,7 +265,7 @@ def in_batch_negative_loss(query_embs, product_embs, labels):
 
 ### Phase 7: Evaluation
 
-**Deliverable**: `chapter02/evaluate_trained_model.py`
+**Deliverable**: `chapter02_TTSN/evaluate_trained_model.py`
 
 **Tasks:**
 1. Load trained model and new indices
@@ -282,7 +282,7 @@ def in_batch_negative_loss(query_embs, product_embs, labels):
 
 ### Phase 8: Demo Script
 
-**Deliverable**: `chapter02/demo_trained_model.py`
+**Deliverable**: `chapter02_TTSN/demo_trained_model.py`
 
 **Features:**
 - Load trained two-tower model
@@ -294,7 +294,7 @@ def in_batch_negative_loss(query_embs, product_embs, labels):
 ## File Structure
 
 ```
-chapter02/
+chapter02_TTSN/
 ├── CHAPTER2_PLAN.md              # This file
 ├── prepare_training_data.py      # Phase 1: Data preparation
 ├── two_tower_model.py            # Phase 2: Model architecture
