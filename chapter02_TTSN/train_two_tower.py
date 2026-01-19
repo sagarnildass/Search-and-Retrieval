@@ -126,6 +126,7 @@ class StageManager:
         self,
         model: nn.Module,
         optimizer: torch.optim.Optimizer,
+        scheduler: Optional[torch.optim.lr_scheduler._LRScheduler],
         epoch: int,
         stage: int,
         metrics: Dict,
@@ -137,6 +138,7 @@ class StageManager:
             'stage': stage,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
             'metrics': metrics
         }
         
@@ -209,6 +211,12 @@ def train_epoch(
     total_inbatch = 0.0
     n_batches = 0
     
+    # Moving average for smoother loss tracking (window of 50 batches)
+    loss_window = []
+    contrastive_window = []
+    inbatch_window = []
+    window_size = 50
+    
     for batch_idx, batch in enumerate(tqdm(train_loader, desc=f"  Epoch {epoch}")):
         queries = batch['query']
         products = batch['product_text']
@@ -235,17 +243,35 @@ def train_epoch(
             scheduler.step()
         
         # Accumulate metrics
-        total_loss += loss.item()
-        total_contrastive += contrastive.item()
-        total_inbatch += inbatch.item()
+        loss_val = loss.item()
+        contrastive_val = contrastive.item()
+        inbatch_val = inbatch.item()
+        
+        total_loss += loss_val
+        total_contrastive += contrastive_val
+        total_inbatch += inbatch_val
         n_batches += 1
         
-        # Log every 100 batches
+        # Update moving averages
+        loss_window.append(loss_val)
+        contrastive_window.append(contrastive_val)
+        inbatch_window.append(inbatch_val)
+        if len(loss_window) > window_size:
+            loss_window.pop(0)
+            contrastive_window.pop(0)
+            inbatch_window.pop(0)
+        
+        # Log every 100 batches with moving average
         if (batch_idx + 1) % 100 == 0:
+            # Calculate moving averages
+            avg_loss = sum(loss_window) / len(loss_window)
+            avg_contrastive = sum(contrastive_window) / len(contrastive_window)
+            avg_inbatch = sum(inbatch_window) / len(inbatch_window)
+            
             print(f"    Batch {batch_idx+1}/{len(train_loader)}, "
-                  f"Loss: {loss.item():.4f}, "
-                  f"Contrastive: {contrastive.item():.4f}, "
-                  f"InBatch: {inbatch.item():.4f}")
+                  f"Loss: {loss_val:.4f} (avg: {avg_loss:.4f}), "
+                  f"Contrastive: {contrastive_val:.4f} (avg: {avg_contrastive:.4f}), "
+                  f"InBatch: {inbatch_val:.4f} (avg: {avg_inbatch:.4f})")
     
     avg_loss = total_loss / n_batches if n_batches > 0 else 0.0
     avg_contrastive = total_contrastive / n_batches if n_batches > 0 else 0.0
@@ -301,7 +327,7 @@ def train_stage(
         weight_decay=0.01
     )
     
-    # Learning rate scheduler with warmup
+    # Learning rate scheduler with warmup (create before checkpoint loading)
     # Calculate total steps for this stage
     epochs_in_stage = len(stage_config['epochs'])
     total_steps = len(train_loader) * epochs_in_stage
@@ -315,6 +341,9 @@ def train_stage(
     
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     
+    print(f"  Total training steps for stage: {total_steps:,}")
+    print(f"  Warmup steps: {warmup_steps:,}")
+    
     # Load checkpoint if resuming
     start_epoch = stage_config['epochs'][0]
     if start_epoch > 1:
@@ -322,6 +351,12 @@ def train_stage(
         if checkpoint:
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            
+            # Load scheduler state if available
+            if 'scheduler_state_dict' in checkpoint and checkpoint['scheduler_state_dict'] is not None:
+                scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+                print(f"  ✓ Loaded scheduler state")
+            
             print(f"  Resumed from epoch {start_epoch - 1}")
     
     best_val_loss = float('inf')
@@ -360,7 +395,7 @@ def train_stage(
             best_val_loss = val_loss
         
         stage_manager.save_checkpoint(
-            model, optimizer, epoch, stage, metrics, is_best=is_best
+            model, optimizer, scheduler, epoch, stage, metrics, is_best=is_best
         )
         
         # Check if we need to mine hard negatives

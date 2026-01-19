@@ -40,7 +40,7 @@ class QueryTower(nn.Module):
         
     def forward(self, query_texts):
         """
-        Encode queries into embeddings
+        Encode queries into embeddings with gradient support
         
         Args:
             query_texts: List of query strings or single string
@@ -52,21 +52,44 @@ class QueryTower(nn.Module):
         if isinstance(query_texts, str):
             query_texts = [query_texts]
         
-        # Encode using SentenceTransformer
-        # The model returns numpy array, convert to tensor
-        with torch.set_grad_enabled(self.training):
-            embeddings = self.base_encoder.encode(
-                query_texts,
-                convert_to_numpy=False,
-                normalize_embeddings=self.normalize,
-                show_progress_bar=False
-            )
+        # Get device
+        try:
+            device = next(self.parameters()).device
+        except:
+            device = torch.device('cpu')
         
-        # Ensure it's a tensor
-        if not isinstance(embeddings, torch.Tensor):
-            embeddings = torch.tensor(embeddings, dtype=torch.float32)
+        # Access underlying model and tokenizer for gradient support
+        # SentenceTransformer structure: [0] is the transformer model
+        model = self.base_encoder[0].auto_model
+        tokenizer = self.base_encoder.tokenizer
         
-        # Normalize if not already normalized
+        # Tokenize
+        encoded = tokenizer(
+            query_texts,
+            padding=True,
+            truncation=True,
+            return_tensors='pt',
+            max_length=512
+        )
+        
+        # Move to device
+        encoded = {k: v.to(device) for k, v in encoded.items()}
+        
+        # Forward pass through model
+        model_output = model(**encoded)
+        
+        # Apply mean pooling (SentenceTransformer default)
+        # Get token embeddings
+        token_embeddings = model_output[0]  # [batch_size, seq_len, hidden_dim]
+        attention_mask = encoded['attention_mask']  # [batch_size, seq_len]
+        
+        # Mean pooling
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, dim=1)
+        sum_mask = torch.clamp(input_mask_expanded.sum(dim=1), min=1e-9)
+        embeddings = sum_embeddings / sum_mask  # [batch_size, hidden_dim]
+        
+        # Normalize
         if self.normalize:
             embeddings = F.normalize(embeddings, p=2, dim=1)
         
@@ -104,7 +127,7 @@ class ProductTower(nn.Module):
         
     def forward(self, product_texts):
         """
-        Encode products into embeddings
+        Encode products into embeddings with gradient support
         
         Args:
             product_texts: List of product text strings or single string
@@ -116,20 +139,44 @@ class ProductTower(nn.Module):
         if isinstance(product_texts, str):
             product_texts = [product_texts]
         
-        # Encode using SentenceTransformer
-        with torch.set_grad_enabled(self.training):
-            embeddings = self.base_encoder.encode(
-                product_texts,
-                convert_to_numpy=False,
-                normalize_embeddings=self.normalize,
-                show_progress_bar=False
-            )
+        # Get device
+        try:
+            device = next(self.parameters()).device
+        except:
+            device = torch.device('cpu')
         
-        # Ensure it's a tensor
-        if not isinstance(embeddings, torch.Tensor):
-            embeddings = torch.tensor(embeddings, dtype=torch.float32)
+        # Access underlying model and tokenizer for gradient support
+        # SentenceTransformer structure: [0] is the transformer model
+        model = self.base_encoder[0].auto_model
+        tokenizer = self.base_encoder.tokenizer
         
-        # Normalize if not already normalized
+        # Tokenize
+        encoded = tokenizer(
+            product_texts,
+            padding=True,
+            truncation=True,
+            return_tensors='pt',
+            max_length=512
+        )
+        
+        # Move to device
+        encoded = {k: v.to(device) for k, v in encoded.items()}
+        
+        # Forward pass through model
+        model_output = model(**encoded)
+        
+        # Apply mean pooling (SentenceTransformer default)
+        # Get token embeddings
+        token_embeddings = model_output[0]  # [batch_size, seq_len, hidden_dim]
+        attention_mask = encoded['attention_mask']  # [batch_size, seq_len]
+        
+        # Mean pooling
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, dim=1)
+        sum_mask = torch.clamp(input_mask_expanded.sum(dim=1), min=1e-9)
+        embeddings = sum_embeddings / sum_mask  # [batch_size, hidden_dim]
+        
+        # Normalize
         if self.normalize:
             embeddings = F.normalize(embeddings, p=2, dim=1)
         
