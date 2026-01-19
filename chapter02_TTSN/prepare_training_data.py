@@ -57,9 +57,22 @@ def load_data():
     print(examples_df['split'].value_counts())
     
     # Load products dataset
+    # Note: products_clean.parquet already contains 'product_text' field which combines:
+    # - product_title
+    # - product_description  
+    # - product_bullet_point
+    # - product_brand (with "Brand: " prefix)
+    # - product_color (with "Color: " prefix)
+    # This was computed in Chapter 1's build_index.py using create_product_text()
     print("\n2. Loading products dataset...")
     products_df = pd.read_parquet(CHAPTER1_DATA_DIR / "products_clean.parquet")
     print(f"   Loaded {len(products_df):,} products")
+    
+    # Verify product_text column exists (should be pre-computed from Chapter 1)
+    if 'product_text' not in products_df.columns:
+        raise ValueError("products_clean.parquet must contain 'product_text' column. "
+                        "Please run Chapter 1's build_index.py first.")
+    print(f"   Product text field available: {products_df['product_text'].notna().sum():,} products")
     
     # Filter examples to only include products that exist
     print("\n3. Filtering examples to existing products...")
@@ -115,12 +128,20 @@ def create_positive_pairs(examples_df, products_df):
     print(f"Label distribution:")
     print(positive_examples['esci_label'].value_counts())
     
-    # Create positive pairs with weights
+    # Create positive pairs with weights and stage markers
     positive_pairs = []
     
     for _, row in tqdm(positive_examples.iterrows(), total=len(positive_examples), desc="Creating positive pairs"):
         esci_label = row['esci_label']
         weight = ESCI_WEIGHTS[esci_label]
+        
+        # Determine which stages this example should be used in
+        # Stage 1: E + S only (no C)
+        # Stage 2: E + S only (no C)
+        # Stage 3: E + S + C (all positives)
+        use_in_stage_1 = esci_label in ['E', 'S']
+        use_in_stage_2 = esci_label in ['E', 'S']
+        use_in_stage_3 = True  # All positives (E, S, C) in Stage 3
         
         positive_pairs.append({
             'query': row['query'],
@@ -130,13 +151,25 @@ def create_positive_pairs(examples_df, products_df):
             'label': 1.0,
             'weight': weight,
             'neg_type': 'positive',
-            'split': row['split']
+            'split': row['split'],
+            'use_in_stage_1': use_in_stage_1,
+            'use_in_stage_2': use_in_stage_2,
+            'use_in_stage_3': use_in_stage_3
         })
     
     positive_df = pd.DataFrame(positive_pairs)
     print(f"\nCreated {len(positive_df):,} positive pairs")
     print(f"Weight distribution:")
     print(positive_df['weight'].value_counts().sort_index(ascending=False))
+    
+    # Print stage distribution
+    print(f"\nStage distribution for positives:")
+    print(f"  Stage 1 (E+S): {(positive_df['use_in_stage_1']).sum():,}")
+    print(f"  Stage 2 (E+S): {(positive_df['use_in_stage_2']).sum():,}")
+    print(f"  Stage 3 (E+S+C): {(positive_df['use_in_stage_3']).sum():,}")
+    print(f"  E labels: {(positive_df['esci_label'] == 'E').sum():,}")
+    print(f"  S labels: {(positive_df['esci_label'] == 'S').sum():,}")
+    print(f"  C labels: {(positive_df['esci_label'] == 'C').sum():,}")
     
     return positive_df
 
@@ -188,6 +221,7 @@ def sample_random_negatives(examples_df, products_df, positive_df,
             split = query_positives.iloc[0]['split'] if len(query_positives) > 0 else 'train'
             
             for product_id in sampled_negatives:
+                # Random negatives are used in all stages
                 random_negatives.append({
                     'query': query,
                     'query_id': query_positives.iloc[0]['query_id'] if len(query_positives) > 0 else None,
@@ -196,12 +230,21 @@ def sample_random_negatives(examples_df, products_df, positive_df,
                     'label': 0.0,
                     'weight': 0.0,
                     'neg_type': 'random',
-                    'split': split
+                    'split': split,
+                    'use_in_stage_1': True,   # Stage 1: Random negatives only
+                    'use_in_stage_2': True,  # Stage 2: Random + Hard negatives
+                    'use_in_stage_3': True   # Stage 3: Random + Hard negatives
                 })
     
     random_neg_df = pd.DataFrame(random_negatives)
     print(f"\nCreated {len(random_neg_df):,} random negative pairs")
     print(f"Actual negative:positive ratio: {len(random_neg_df)/n_positives:.2f}:1")
+    
+    # Print stage distribution
+    print(f"\nStage distribution for random negatives:")
+    print(f"  Stage 1: {(random_neg_df['use_in_stage_1']).sum():,}")
+    print(f"  Stage 2: {(random_neg_df['use_in_stage_2']).sum():,}")
+    print(f"  Stage 3: {(random_neg_df['use_in_stage_3']).sum():,}")
     
     return random_neg_df
 
@@ -280,6 +323,7 @@ def generate_hard_negatives(examples_df, positive_df, embedding_model,
             split = query_to_split[query]
             
             for product_id, dist in hard_neg_candidates:
+                # Hard negatives are used in Stage 2 and Stage 3 (not Stage 1)
                 hard_negatives.append({
                     'query': query,
                     'query_id': query_id,
@@ -288,12 +332,21 @@ def generate_hard_negatives(examples_df, positive_df, embedding_model,
                     'label': 0.0,
                     'weight': 0.0,
                     'neg_type': 'hard',
-                    'split': split
+                    'split': split,
+                    'use_in_stage_1': False,  # Stage 1: Random negatives only
+                    'use_in_stage_2': True,   # Stage 2: Random + Hard negatives
+                    'use_in_stage_3': True    # Stage 3: Random + Hard negatives
                 })
     
     hard_neg_df = pd.DataFrame(hard_negatives)
     print(f"\nCreated {len(hard_neg_df):,} hard negative pairs")
     print(f"Average hard negatives per query: {len(hard_neg_df)/len(query_to_relevant):.1f}")
+    
+    # Print stage distribution
+    print(f"\nStage distribution for hard negatives:")
+    print(f"  Stage 1: {(hard_neg_df['use_in_stage_1']).sum():,} (not used)")
+    print(f"  Stage 2: {(hard_neg_df['use_in_stage_2']).sum():,}")
+    print(f"  Stage 3: {(hard_neg_df['use_in_stage_3']).sum():,}")
     
     return hard_neg_df
 
@@ -368,6 +421,11 @@ def create_splits(positive_df, random_neg_df, hard_neg_df, val_ratio=0.1, seed=4
         print(f"  Negatives: {(split_df['label'] == 0.0).sum():,}")
         print(f"  Random negatives: {(split_df['neg_type'] == 'random').sum():,}")
         print(f"  Hard negatives: {(split_df['neg_type'] == 'hard').sum():,}")
+        
+        # Print stage distribution
+        print(f"  Stage 1 examples: {(split_df['use_in_stage_1']).sum():,}")
+        print(f"  Stage 2 examples: {(split_df['use_in_stage_2']).sum():,}")
+        print(f"  Stage 3 examples: {(split_df['use_in_stage_3']).sum():,}")
     
     return train_pairs, val_pairs, test_pairs
 
@@ -407,6 +465,9 @@ def save_training_data(train_df, val_df, test_df, output_dir):
             'negatives': int((train_df['label'] == 0.0).sum()),
             'random_negatives': int((train_df['neg_type'] == 'random').sum()),
             'hard_negatives': int((train_df['neg_type'] == 'hard').sum()),
+            'stage_1_examples': int((train_df['use_in_stage_1']).sum()),
+            'stage_2_examples': int((train_df['use_in_stage_2']).sum()),
+            'stage_3_examples': int((train_df['use_in_stage_3']).sum()),
         },
         'val': {
             'total': len(val_df),
@@ -414,6 +475,9 @@ def save_training_data(train_df, val_df, test_df, output_dir):
             'negatives': int((val_df['label'] == 0.0).sum()),
             'random_negatives': int((val_df['neg_type'] == 'random').sum()),
             'hard_negatives': int((val_df['neg_type'] == 'hard').sum()),
+            'stage_1_examples': int((val_df['use_in_stage_1']).sum()),
+            'stage_2_examples': int((val_df['use_in_stage_2']).sum()),
+            'stage_3_examples': int((val_df['use_in_stage_3']).sum()),
         },
         'test': {
             'total': len(test_df),
@@ -421,6 +485,9 @@ def save_training_data(train_df, val_df, test_df, output_dir):
             'negatives': int((test_df['label'] == 0.0).sum()),
             'random_negatives': int((test_df['neg_type'] == 'random').sum()),
             'hard_negatives': int((test_df['neg_type'] == 'hard').sum()),
+            'stage_1_examples': int((test_df['use_in_stage_1']).sum()),
+            'stage_2_examples': int((test_df['use_in_stage_2']).sum()),
+            'stage_3_examples': int((test_df['use_in_stage_3']).sum()),
         }
     }
     
