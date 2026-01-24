@@ -48,12 +48,33 @@ Checkpoints will be saved to:
 └── best_model.pt
 ```
 
+The script automatically creates a zip file:
+```
+/kaggle/working/checkpoints_stage1.zip
+```
+
 ## Download Checkpoints
 
-After training completes:
-1. Go to "Output" tab
-2. Download the `checkpoints/` folder
-3. Use `epoch_2.pt` for hard negative mining
+**Method 1: Download Zip File (Recommended)**
+1. After training completes, the script creates `checkpoints_stage1.zip`
+2. Go to the **"Output"** tab in your Kaggle notebook
+3. Find `checkpoints_stage1.zip` in the file list
+4. Click the **download button (⬇️)** next to the zip file
+5. Extract the zip file on your local machine
+
+**Method 2: Save Version**
+1. Click **"Save Version"** → **"Save & Run All"**
+2. Wait for the notebook to complete
+3. Go to the **"Output"** tab
+4. Download `checkpoints_stage1.zip` from there
+
+**Method 3: Manual Zip (if automatic zip failed)**
+1. Add a new cell in your notebook
+2. Copy the contents of `kaggle_download_checkpoints.py`
+3. Run the cell to create the zip file manually
+4. Then follow Method 1 to download
+
+**Note:** You cannot browse `/kaggle/working/` directly in Kaggle. You must use the Output tab or create a version to access files.
 
 ## Configuration
 

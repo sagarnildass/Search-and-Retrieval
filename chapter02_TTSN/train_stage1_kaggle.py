@@ -21,6 +21,7 @@ from tqdm import tqdm
 import warnings
 from typing import Dict, Optional, Tuple
 import time
+import shutil
 
 # Set environment variables to avoid tokenizer warnings
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
@@ -807,8 +808,46 @@ def main():
     print(f"  - epoch_1.pt")
     print(f"  - epoch_2.pt")
     print(f"  - best_model.pt")
-    print(f"\nNext steps:")
-    print(f"  1. Download checkpoints from Kaggle")
+    
+    # Zip checkpoints for easy download
+    print(f"\n{'='*80}")
+    print("CREATING CHECKPOINT ARCHIVE")
+    print(f"{'='*80}")
+    
+    zip_path = Path("/kaggle/working/checkpoints_stage1.zip")
+    checkpoint_dir = Path(CHECKPOINT_DIR)
+    
+    if checkpoint_dir.exists():
+        # Create zip file
+        shutil.make_archive(
+            str(zip_path).replace('.zip', ''),  # Remove .zip extension (make_archive adds it)
+            'zip',
+            checkpoint_dir
+        )
+        print(f"\n✓ Checkpoint archive created: {zip_path}")
+        print(f"  Size: {zip_path.stat().st_size / (1024*1024):.2f} MB")
+        
+        # List files in archive
+        print(f"\n  Files included:")
+        for checkpoint_file in sorted(checkpoint_dir.glob("*.pt")):
+            size_mb = checkpoint_file.stat().st_size / (1024*1024)
+            print(f"    - {checkpoint_file.name} ({size_mb:.2f} MB)")
+    else:
+        print(f"  Warning: Checkpoint directory not found: {CHECKPOINT_DIR}")
+    
+    print(f"\n{'='*80}")
+    print("DOWNLOAD INSTRUCTIONS")
+    print(f"{'='*80}")
+    print(f"\nTo download checkpoints:")
+    print(f"  1. Go to the 'Output' tab in your Kaggle notebook")
+    print(f"  2. Find 'checkpoints_stage1.zip' in the file list")
+    print(f"  3. Click the download button (⬇️) next to the zip file")
+    print(f"\nAlternatively:")
+    print(f"  1. Click 'Save Version' → 'Save & Run All'")
+    print(f"  2. After it completes, go to 'Output' tab")
+    print(f"  3. Download the zip file from there")
+    print(f"\nNext steps after downloading:")
+    print(f"  1. Extract checkpoints_stage1.zip")
     print(f"  2. Use epoch_2.pt for hard negative mining")
     print(f"  3. Train Stage 2 with new hard negatives")
 
